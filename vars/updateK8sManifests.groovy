@@ -9,6 +9,7 @@ def call(Map config = [:]) {
     def gitCredentials = config.gitCredentials ?: 'github-credentials'
     def gitUserName = config.gitUserName ?: 'Jenkins CI'
     def gitUserEmail = config.gitUserEmail ?: 'jenkins@example.com'
+    def gitBranch = config.gitBranch ?: 'master'   // Default branch if not provided
     
     echo "Updating Kubernetes manifests with image tag: ${imageTag}"
     
@@ -23,32 +24,30 @@ def call(Map config = [:]) {
             git config user.email "${gitUserEmail}"
         """
         
-        // Update deployment manifests with new image tags - using proper Linux sed syntax
+        // Update deployment manifests with new image tags
         sh """
-            # Update main application deployment - note the correct image name is iemafzal/easyshop-app
             sed -i "s|image: .*easyshop-app:.*|image: vignesh997/easyshop-app:${imageTag}|g" ${manifestsPath}/08-easyshop-deployment.yaml
             
-            # Update migration job if it exists
             if [ -f "${manifestsPath}/12-migration-job.yaml" ]; then
                 sed -i "s|image: .*easyshop-migration:.*|image: vignesh997/easyshop-migration:${imageTag}|g" ${manifestsPath}/12-migration-job.yaml
             fi
             
-            # Ensure ingress is using the correct domain
             if [ -f "${manifestsPath}/10-ingress.yaml" ]; then
                 sed -i "s|host: .*|host: easyshop.letsdeployit.com|g" ${manifestsPath}/10-ingress.yaml
             fi
             
-            # Check for changes
             if git diff --quiet; then
                 echo "No changes to commit"
             else
-                # Commit and push changes
                 git add ${manifestsPath}/*.yaml
                 git commit -m "Update image tags to ${imageTag} and ensure correct domain [ci skip]"
-                
+
+                # Fix detached HEAD by creating/using the branch locally
+                git checkout -B ${gitBranch}
+
                 # Set up credentials for push
                 git remote set-url origin https://\${GIT_USERNAME}:\${GIT_PASSWORD}@github.com/Vignesh8312/shoppyapp_hackathon.git
-                git push origin HEAD:\${GIT_BRANCH}
+                git push origin ${gitBranch}
             fi
         """
     }
